@@ -4,7 +4,7 @@ import os
 import argparse
 import numpy as np
 
-from preprocess.vocab import Vocab
+from mimic_preprocess.vocab import Vocab
 
 
 if __name__ == '__main__':

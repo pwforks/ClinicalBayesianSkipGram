@@ -6,7 +6,7 @@ import re
 import argparse
 import pandas as pd
 
-from preprocess.BioSentVec.src.preprocess import preprocess_mimic
+from mimic_preprocess.BioSentVec.src.preprocess import preprocess_mimic
 
 
 if __name__ == '__main__':
@@ -18,7 +18,7 @@ if __name__ == '__main__':
     # Expand home path (~) so that pandas knows where to look
     print('Loading data...')
     args.mimic_fp = os.path.expanduser(args.mimic_fp)
-    df = pd.read_csv(args.mimic_fp + '.csv', dtype={'TEXT': str})
+    df = pd.read_csv(args.mimic_fp + '.csv')
     print('Loaded data. Tokenizing...')
 
     categories, parsed_docs = [], []
@@ -45,7 +45,7 @@ if __name__ == '__main__':
             token_cts['__ALL__'] += 1
         parsed_docs.append(tokenized_cleaned_doc)
         categories.append(row['CATEGORY'])
-        if row_idx + 1 % 100 == 0:
+        if (row_idx + 1) % 1000 == 0:
             print('Processed {} out of {} rows'.format(row_idx + 1, df.shape[0]))
     json.dump(list(zip(categories, parsed_docs)), open(args.mimic_fp + '_tokenized.json', 'w'))
     json.dump(token_cts, open(args.mimic_fp + '_token_counts.json', 'w'))
