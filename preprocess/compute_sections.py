@@ -7,7 +7,7 @@ import pandas as pd
 from tqdm import tqdm
 
 
-def enumerate_section_ids(ids, section_pos_idxs):
+def enumerate_section_ids(ids, section_pos_idxs, token_vocab, section_vocab):
     """
     :param ids: List of token ids where negative numbers are section ids and 0 are document boundaries.
     Regular tokens are represented by positive ids
@@ -16,7 +16,9 @@ def enumerate_section_ids(ids, section_pos_idxs):
     """
     section_ids = []
     for section_num, section_pos_idx in enumerate(section_pos_idxs):
-        section_id = -ids[section_pos_idx]
+        token_section_id = -ids[section_pos_idx]
+        # Make an adjustment to find the appropriate id in the new section vocabulary
+        section_id = section_vocab.get_id(token_vocab.get_token(token_section_id))
         assert section_id >= 0
         if section_num + 1 == len(section_pos_idxs):
             section_len = len(ids) - section_pos_idx

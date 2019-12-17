@@ -33,21 +33,19 @@ class SkipGramBatchLoader:
 
         return np.concatenate([left_context_truncated, right_context_truncated])
 
-    def next(self, ids, section_ids, window_size, add_section_as_context=False):
+    def next(self, ids, full_section_ids, window_size):
         batch_idxs = self.batches[self.batch_ct]
         center_ids = ids[batch_idxs]
-        num_pseudo_contexts = 1 if add_section_as_context else 0
-        context_ids = np.zeros([self.batch_size, (window_size * 2) + num_pseudo_contexts], dtype=int)
-        actual_window_sizes = []
+        context_ids = np.zeros([self.batch_size, (window_size * 2)], dtype=int)
+        section_ids = np.zeros([self.batch_size, ], dtype=int)
+        window_sizes = []
         for batch_idx, center_idx in enumerate(batch_idxs):
             example_context_ids = self.extract_context_ids(ids, center_idx, window_size)
-            actual_window_size = len(example_context_ids) + num_pseudo_contexts
-            if add_section_as_context:
-                context_ids[batch_idx, 0] = section_ids[center_idx]
-            context_ids[batch_idx, num_pseudo_contexts:actual_window_size] = example_context_ids
-            actual_window_sizes.append(actual_window_size)
+            section_ids[batch_idx] = full_section_ids[center_idx]
+            context_ids[batch_idx, :len(example_context_ids)] = example_context_ids
+            window_sizes.append(len(example_context_ids))
         self.batch_ct += 1
-        return center_ids, context_ids, actual_window_sizes
+        return center_ids, context_ids, section_ids, window_sizes
 
     def reset(self):
         batch_idxs = np.array(list(set(np.arange(self.N)) - set(self.section_idxs)))

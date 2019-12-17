@@ -14,6 +14,7 @@ from batcher import SkipGramBatchLoader
 from compute_sections import enumerate_section_ids
 from model_utils import get_git_revision_hash, render_args, restore_model, save_checkpoint
 from vae import VAE
+from vocab import Vocab
 
 
 if __name__ == '__main__':
@@ -29,14 +30,13 @@ if __name__ == '__main__':
     # Training Hyperparameters
     parser.add_argument('--batch_size', default=1024, type=int)
     parser.add_argument('-combine_phrases', default=False, action='store_true')
-    parser.add_argument('-section2vec', default=False, action='store_true')
     parser.add_argument('--epochs', default=4, type=int)
     parser.add_argument('--lr', default=0.001, type=float)
     parser.add_argument('--window', default=5, type=int)
-    parser.add_argument('-use_pretrained', default=False, action='store_true')
     parser.add_argument('--ns', type=int, default=1)
 
     # Model Hyperparameters
+    parser.add_argument('-non_negative_embed', default=False, action='store_true')
     parser.add_argument('--encoder_hidden_dim', default=64, type=int, help='hidden dimension for encoder')
     parser.add_argument('--encoder_input_dim', default=64, type=int, help='embedding dimemsions for encoder')
     parser.add_argument('--hinge_loss_margin', default=1.0, type=float, help='reconstruction margin')
@@ -59,13 +59,18 @@ if __name__ == '__main__':
     vocab_infile = '../preprocess/data/vocab{}{}.pk'.format(debug_str, phrase_str)
     print('Loading vocabulary from {}...'.format(vocab_infile))
     with open(vocab_infile, 'rb') as fd:
-        vocab = pickle.load(fd)
-    print('Loaded vocabulary of size={}...'.format(vocab.separator_start_vocab_id))
+        token_vocab = pickle.load(fd)
+    print('Loaded vocabulary of size={}...'.format(token_vocab.separator_start_vocab_id))
 
     print('Collecting document information...')
     section_pos_idxs = np.where(ids <= 0)[0]
-    section_id_range = np.arange(vocab.separator_start_vocab_id, vocab.size())
-    section_ids = enumerate_section_ids(ids, section_pos_idxs)
+    section_id_range = np.arange(token_vocab.separator_start_vocab_id, token_vocab.size())
+    section_vocab = Vocab()
+    for section_id in section_id_range:
+        section_vocab.add_token(token_vocab.get_token(section_id))
+    full_section_ids = enumerate_section_ids(ids, section_pos_idxs, token_vocab, section_vocab)
+
+    token_vocab.truncate()
 
     device_str = 'cuda' if torch.cuda.is_available() and not args.cpu else 'cpu'
     args.device = torch.device(device_str)
@@ -73,15 +78,7 @@ if __name__ == '__main__':
 
     batcher = SkipGramBatchLoader(len(ids), section_pos_idxs, batch_size=args.batch_size)
 
-    # # Load pretrained word embeddings if requested
-    pretrained_in_fn = '../preprocess/data/embeddings{}.npy'.format(debug_str)
-    pretrained_embeddings = None
-    if args.use_pretrained:
-        with open(pretrained_in_fn, 'rb') as fd:
-            pretrained_embeddings = np.load(fd)
-            assert vocab.size() == pretrained_embeddings.shape[0]
-
-    model = VAE(args, vocab.size(), pretrained_embeddings=pretrained_embeddings).to(args.device)
+    model = VAE(args, token_vocab.size(), section_vocab.size()).to(args.device)
     if args.restore_experiment is not None:
         prev_args, model, vocab, optimizer_state = restore_model(args.restore_experiment)
 
@@ -105,39 +102,31 @@ if __name__ == '__main__':
         print('Starting Epoch={}'.format(epoch))
         batcher.reset()
         num_batches = batcher.num_batches()
-        epoch_joint_loss, epoch_kl_loss, epoch_recon_loss = 0.0, 0.0, 0.0
+        epoch_loss = 0.0
         for _ in tqdm(range(num_batches)):
             # Reset gradients
             optimizer.zero_grad()
 
-            center_ids, context_ids, num_contexts = batcher.next(ids, section_ids, args.window,
-                                                                 add_section_as_context=args.section2vec)
+            center_ids, context_ids, section_ids, num_contexts = batcher.next(ids, full_section_ids, args.window)
             center_ids_tens = torch.LongTensor(center_ids).to(args.device)
             context_ids_tens = torch.LongTensor(context_ids).to(args.device)
+            section_ids_tens = torch.LongTensor(section_ids).to(args.device)
 
             neg_id_shape = (context_ids.shape[0], context_ids.shape[1], args.ns)
             neg_ids = vocab.neg_sample(size=neg_id_shape)
-            if args.section2vec:
-                neg_ids[:, 0] = np.random.choice(section_id_range, size=[args.batch_size, args.ns])
             neg_ids_tens = torch.LongTensor(neg_ids).to(args.device)
 
-            kl_loss, recon_loss = model(center_ids_tens, context_ids_tens, neg_ids_tens, num_contexts)
-            joint_loss = kl_loss + recon_loss
-            joint_loss.backward()  # backpropagate loss
+            loss = model(center_ids_tens, section_ids_tens, context_ids_tens, neg_ids_tens, num_contexts)
+            loss.backward()  # backpropagate loss
 
-            epoch_kl_loss += kl_loss.item()
-            epoch_recon_loss += recon_loss.item()
-            epoch_joint_loss += joint_loss.item()
+            epoch_loss += loss.item()
             optimizer.step()
-        epoch_joint_loss /= float(batcher.num_batches())
-        epoch_kl_loss /= float(batcher.num_batches())
-        epoch_recon_loss /= float(batcher.num_batches())
+        epoch_loss /= float(batcher.num_batches())
         sleep(0.1)
-        print('Epoch={}. Joint loss={}.  KL Loss={}. Reconstruction Loss={}'.format(
-            epoch, epoch_joint_loss, epoch_kl_loss, epoch_recon_loss))
+        print('Epoch={}. Loss={}.'.format(epoch, epoch_loss))
         assert not batcher.has_next()
 
         # Serializing everything from model weights and optimizer state, to to loss function and arguments
-        losses_dict = {'losses': {'joint': epoch_joint_loss, 'kl': epoch_kl_loss, 'recon': epoch_recon_loss}}
+        losses_dict = {'losses': {'kl_loss': epoch_loss}}
         checkpoint_fp = os.path.join(weights_dir, 'checkpoint_{}.pth'.format(epoch))
-        save_checkpoint(args, model, optimizer, vocab, losses_dict, checkpoint_fp=checkpoint_fp)
+        save_checkpoint(args, model, optimizer, token_vocab, section_vocab, losses_dict, checkpoint_fp=checkpoint_fp)

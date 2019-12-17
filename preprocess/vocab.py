@@ -15,6 +15,11 @@ class Vocab:
     def pad_id(self):
         return self.get_id(Vocab.PAD_TOKEN)
 
+    def truncate(self):
+        print('Removing section pseudo-tokens from vocabulary...')
+        self.support = self.support[:self.separator_start_vocab_id]
+        self.i2w = self.i2w[:self.separator_start_vocab_id]
+
     def add_tokens(self, tokens, token_support=1):
         for tidx, token in enumerate(tokens):
             self.add_token(token, token_support=token_support)
