@@ -80,7 +80,7 @@ if __name__ == '__main__':
 
     model = VAE(args, token_vocab.size(), section_vocab.size()).to(args.device)
     if args.restore_experiment is not None:
-        prev_args, model, vocab, optimizer_state = restore_model(args.restore_experiment)
+        prev_args, model, token_vocab, section_vocab, optimizer_state = restore_model(args.restore_experiment)
 
     # Instantiate Adam optimizer
     trainable_params = filter(lambda x: x.requires_grad, model.parameters())
@@ -113,7 +113,7 @@ if __name__ == '__main__':
             section_ids_tens = torch.LongTensor(section_ids).to(args.device)
 
             neg_id_shape = (context_ids.shape[0], context_ids.shape[1], args.ns)
-            neg_ids = vocab.neg_sample(size=neg_id_shape)
+            neg_ids = token_vocab.neg_sample(size=neg_id_shape)
             neg_ids_tens = torch.LongTensor(neg_ids).to(args.device)
 
             loss = model(center_ids_tens, section_ids_tens, context_ids_tens, neg_ids_tens, num_contexts)
