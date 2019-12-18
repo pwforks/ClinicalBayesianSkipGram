@@ -75,7 +75,7 @@ if __name__ == '__main__':
 
     # Instantiate Adam optimizer
     trainable_params = filter(lambda x: x.requires_grad, model.parameters())
-    optimizer = torch.optim.Adam(trainable_params, lr=args.lr)
+    optimizer = torch.optim.Adam(trainable_params, lr=args.lr, weight_decay=1e-3)
 
     loss_func = nn.CrossEntropyLoss()
 
