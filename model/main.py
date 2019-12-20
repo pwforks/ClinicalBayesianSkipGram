@@ -36,7 +36,6 @@ if __name__ == '__main__':
     parser.add_argument('--ns', type=int, default=1)
 
     # Model Hyperparameters
-    parser.add_argument('-non_negative_embed', default=False, action='store_true')
     parser.add_argument('--encoder_hidden_dim', default=64, type=int, help='hidden dimension for encoder')
     parser.add_argument('--encoder_input_dim', default=64, type=int, help='embedding dimemsions for encoder')
     parser.add_argument('--hinge_loss_margin', default=1.0, type=float, help='reconstruction margin')
@@ -112,8 +111,8 @@ if __name__ == '__main__':
             context_ids_tens = torch.LongTensor(context_ids).to(args.device)
             section_ids_tens = torch.LongTensor(section_ids).to(args.device)
 
-            neg_id_shape = (context_ids.shape[0], context_ids.shape[1], args.ns)
-            neg_ids = vocab.neg_sample(size=neg_id_shape)
+            neg_id_shape = (context_ids.shape[0], context_ids.shape[1])
+            neg_ids = token_vocab.neg_sample(size=neg_id_shape)
             neg_ids_tens = torch.LongTensor(neg_ids).to(args.device)
 
             loss = model(center_ids_tens, section_ids_tens, context_ids_tens, neg_ids_tens, num_contexts)

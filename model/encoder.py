@@ -14,14 +14,7 @@ class Encoder(nn.Module):
         self.v = nn.Linear(args.encoder_hidden_dim, 1, bias=True)
 
         self.token_embeddings = nn.Embedding(token_vocab_size, args.encoder_input_dim, padding_idx=0)
-        if args.non_negative_embed:
-            vocab_embeddings_init = np.random.uniform(low=0, high=3, size=(token_vocab_size, args.encoder_input_dim))
-            self.token_embeddings.load_state_dict({'weight': torch.from_numpy(vocab_embeddings_init)})
-
         self.section_embeddings = nn.Embedding(section_vocab_size, args.encoder_input_dim, padding_idx=0)
-        if args.non_negative_embed:
-            section_embeddings_init = np.random.uniform(low=0, high=3, size=(section_vocab_size, args.encoder_input_dim))
-            self.section_embeddings.load_state_dict({'weight': torch.from_numpy(section_embeddings_init)})
         
     def forward(self, center_ids, section_ids):
         """
@@ -38,4 +31,3 @@ class Encoder(nn.Module):
         h = self.dropout(F.relu(self.f(merged_embeds)))
         var_clamped = self.v(h).exp().clamp_min(1.0)
         return self.u(h), var_clamped
-
