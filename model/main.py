@@ -79,7 +79,7 @@ if __name__ == '__main__':
 
     model = VAE(args, token_vocab.size(), section_vocab.size()).to(args.device)
     if args.restore_experiment is not None:
-        prev_args, model, vocab, optimizer_state = restore_model(args.restore_experiment)
+        prev_args, model, token_vocab, section_vocab, optimizer_state = restore_model(args.restore_experiment)
 
     # Instantiate Adam optimizer
     trainable_params = filter(lambda x: x.requires_grad, model.parameters())
