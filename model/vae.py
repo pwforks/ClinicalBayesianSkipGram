@@ -49,9 +49,16 @@ class VAE(nn.Module):
         kl_neg = compute_kl(mu_q_flat, sigma_q_flat, neg_mu_p_flat, neg_sigma_p_flat, device=self.device).view(
             batch_size, -1)
 
-        hinge_loss = (kl_pos - kl_neg + self.margin).clamp_min_(0)
-        hinge_loss.masked_fill_(mask, 0)
-        return hinge_loss.sum(1)
+        # hinge_loss = (kl_pos - kl_neg + self.margin).clamp_min_(0)
+        # hinge_loss.masked_fill_(mask, 0)
+        # return hinge_loss.sum(1)
+
+        merged = torch.cat([kl_pos.unsqueeze(-1), kl_neg.unsqueeze(-1)], axis=-1).view(batch_size * num_context_ids, 2)
+        labels = torch.zeros([batch_size * num_context_ids]).long()
+
+        loss = nn.CrossEntropyLoss(reduction='none')(merged, labels).view(batch_size, num_context_ids)
+        loss = loss.masked_fill(mask, 0)
+        return loss.sum(1)
 
     def _compute_priors(self, ids):
         return self.embeddings_mu(ids), self.embeddings_log_sigma(ids).exp()
